@@ -1,0 +1,26 @@
+# node
+node_modules/
+npm-debug.log*
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# environment
+.env
+.env.*.local
+
+# build
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Capacitor / native build artifacts (if any)
+android/
+ios/

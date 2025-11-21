@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Strive Focus Blue Theme */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 20%;
+    
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 20%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 20%;
+    
+    --primary: 215 82% 56%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 20%;
+    
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    
+    --accent: 215 82% 56%;
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 215 82% 56%;
+    
+    --radius: 0.75rem;
+    
+    /* Success color for completed habits */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    
+    /* Custom semantic colors */
+    --streak-fire: 14 100% 57%;
+    --exp-gold: 45 93% 47%;
+    --level-badge: 215 82% 56%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}

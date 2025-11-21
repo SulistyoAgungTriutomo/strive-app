@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    /* File Layout */
+    "rootDir": "./src", // Aktifkan ini
+    "outDir": "./dist", // Aktifkan ini
+    
+    /* Environment & Modules */
+    "module": "commonjs",             // GANTI: Gunakan CommonJS untuk Node/Express
+    "target": "es2020",               // GANTI: Target stabil
+    "esModuleInterop": true,          // TAMBAH: Memperbaiki masalah import/require
+    "moduleResolution": "node",       // TAMBAH: Resolusi modul Node
+    "types": ["node"],                // GANTI: Memperbaiki error 'process'
+    
+    /* Output */
+    "sourceMap": true,
+    "declaration": true,
+
+    /* Type Checking */
+    "strict": true,                   // Jaga agar type checking tetap ketat
+    "skipLibCheck": true,
+    
+    /* Hapus Opsi Konflik */
+    // Hapus: "verbatimModuleSyntax": true,
+    // Hapus: "isolatedModules": true,
+    // Hapus: "noUncheckedSideEffectImports": true,
+  }
+}

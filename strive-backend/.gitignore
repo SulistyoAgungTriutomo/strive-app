@@ -1,0 +1,23 @@
+# Dependencies
+/node_modules
+
+# Environment Variables and Secrets
+.env
+.env.*
+*.local
+
+# Build/Output folder (JavaScript yang dihasilkan dari kompilasi TypeScript)
+/dist
+/build
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# TypeScript cache
+*.tsbuildinfo
