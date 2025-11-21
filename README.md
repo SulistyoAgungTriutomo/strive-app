@@ -45,13 +45,6 @@ strive-app/
 ├── strive-frontend/   # React application (Vite)
 └── strive-backend/    # Node.js Express API
 
-Tentu, masukkan SEMUANYA (termasuk Getting Started).
-
-Bagian Getting Started itu sangat penting agar orang lain (atau Anda sendiri di masa depan) tahu cara menjalankan aplikasi ini di komputer baru. Tanpa bagian itu, orang akan bingung harus install apa dan perintah apa yang harus dijalankan.
-
-Jadi, silakan Copy & Paste seluruh blok kode di bawah ini ke dalam editor README.md di GitHub Anda:
-
-Markdown
 
 # 🚀 Strive - Gamified Habit Tracker
 
