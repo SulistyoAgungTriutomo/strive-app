@@ -1,4 +1,5 @@
-export const API_BASE = "http://localhost:3000";
+//export const API_BASE = "http://192.168.1.101:3000";
+export const API_BASE = "http://10.0.2.2:3000";
 
 async function request(path: string, opts: RequestInit = {}) {
   const url = `${API_BASE}${path}`;
