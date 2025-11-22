@@ -1,121 +1,150 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
-// UBAH IMPORT: Gunakan API Client dan LocalStorage helper
+import { Loader2, User, Mail, Lock } from "lucide-react";
 import { authApi } from "@/lib/apiClient";
 import { saveToken } from "@/lib/localStorage";
+import logoImg from "@/assets/logo.png";
+
+const signUpSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+type SignUpFormValues = z.infer<typeof signUpSchema>;
 
 const SignUp = () => {
   const navigate = useNavigate();
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const form = useForm<SignUpFormValues>({
+    resolver: zodResolver(signUpSchema),
+    defaultValues: {
+      username: "",
+      email: "",
+      password: "",
+    },
+  });
 
+  const onSubmit = async (data: SignUpFormValues) => {
+    setIsLoading(true);
     try {
-      // 1. Panggil API Register ke Backend Node.js
-      const response = await authApi.register({
-        email,
-        password,
-        username: fullName // Kirim nama sebagai username atau meta data
-      });
-
-      // 2. Cek respon. Jika sukses dan ada token (auto-login), simpan dan masuk.
+      const response = await authApi.register(data);
       if (response?.session?.access_token) {
-        saveToken(response.session.access_token);
-        toast.success("Account created! Welcome to Strive!");
-        navigate("/dashboard");
+          saveToken(response.session.access_token);
+          toast.success("Account created! Welcome to Strive!");
+          navigate("/dashboard");
       } else {
-        // Jika tidak ada token (misal butuh konfirmasi email), arahkan ke login
-        toast.success("Account created! Please sign in.");
-        navigate("/signin");
+          toast.success("Account created! Please sign in.");
+          navigate("/signin");
       }
     } catch (error: any) {
-      console.error("Signup error:", error);
+      console.error(error);
       toast.error(error.message || "Failed to create account");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Join Strive</CardTitle>
-          <CardDescription className="text-center">
-            Create your account to start building better habits
+    // Container utama flex-col untuk menumpuk Logo dan Card
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+      
+      {/* --- BAGIAN LOGO & BRANDING (DI LUAR CARD) --- */}
+      <div className="text-center mb-8 space-y-2">
+        <img 
+          src={logoImg} 
+          alt="Strive Logo" 
+          className="h-16 mx-auto shadow-sm rounded-xl" 
+        />
+        <h1 className="text-3xl font-bold tracking-tight">Strive</h1>
+        <p className="text-muted-foreground text-sm">
+          Build habits. Level up. Thrive.
+        </p>
+      </div>
+
+      {/* --- CARD FORM --- */}
+      <Card className="w-full max-w-md shadow-lg border-border/50">
+        <CardHeader className="text-center space-y-1">
+          <CardTitle className="text-xl font-bold">Join Strive</CardTitle>
+          <CardDescription>
+            Start building better habits today
           </CardDescription>
         </CardHeader>
+        
         <CardContent>
-          <form onSubmit={handleSignUp} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="fullName">Full Name</Label>
-              <Input
-                id="fullName"
-                type="text"
-                placeholder="John Doe"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                disabled={loading}
-              />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Full Name</Label>
+                <div className="relative">
+                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="username"
+                        type="text"
+                        placeholder="John Doe"
+                        className="pl-9"
+                        {...form.register("username")}
+                    />
+                </div>
+                {form.formState.errors.username && (
+                  <p className="text-sm text-destructive">{form.formState.errors.username.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="email"
+                        type="email"
+                        placeholder="name@example.com"
+                        className="pl-9"
+                        {...form.register("email")}
+                    />
+                </div>
+                {form.formState.errors.email && (
+                  <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="password"
+                        type="password"
+                        className="pl-9"
+                        {...form.register("password")}
+                    />
+                </div>
+                {form.formState.errors.password && (
+                  <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>
+                )}
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-                minLength={6}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                "Sign Up"
-              )}
+
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Create Account"}
             </Button>
-            <div className="text-center text-sm">
-              Already have an account?{" "}
-              <Button
-                type="button"
-                variant="link"
-                className="p-0"
-                onClick={() => navigate("/signin")}
-              >
-                Sign in
-              </Button>
-            </div>
           </form>
+
+          <div className="mt-6 text-center text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <Link to="/signin" className="font-medium text-primary hover:underline">
+              Sign in
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

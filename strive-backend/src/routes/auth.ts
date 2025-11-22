@@ -163,4 +163,25 @@ router.put('/me', protect, async (req: any, res: Response) => {
     }
 });
 
+router.get('/google', async (req, res) => {
+    try {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                // Arahkan kembali ke halaman khusus di frontend kita
+                redirectTo: 'http://localhost:8080/auth/callback',
+                skipBrowserRedirect: true // Penting: Agar kita dapat URL-nya saja
+            }
+        });
+
+        if (error) throw error;
+
+        // Kirim URL ke frontend agar frontend yang melakukan redirect
+        return res.json({ url: data.url });
+    } catch (err: any) {
+        console.error("Google Auth Error:", err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;

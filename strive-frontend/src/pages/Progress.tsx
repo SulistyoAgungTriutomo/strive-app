@@ -34,7 +34,15 @@ const Progress = () => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const logsForSelectedDate = logs.filter((log: ProgressEntry) => {
     if (!selectedDate) return false;
-    return log.completion_date === selectedDate.toISOString().split('T')[0];
+    
+    // Perbaikan: Gunakan waktu lokal komputer, BUKAN UTC (toISOString)
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(selectedDate.getDate()).padStart(2, '0');
+    const selectedDateStr = `${year}-${month}-${day}`;
+
+    // Bandingkan string tanggal (YYYY-MM-DD)
+    return log.completion_date === selectedDateStr;
   });
 
   const expForNextLevel = 100; 
@@ -67,7 +75,7 @@ const Progress = () => {
           </TabsList>
 
           <TabsContent value="calendar" className="space-y-6">
-             {/* ... (Kode Kalender yang sudah Anda miliki, Copy dari sebelumnya) ... */}
+             {/* ... (Kode Kalender yang sudah miliki, Copy dari sebelumnya) ... */}
              <div className="bg-card rounded-2xl shadow-sm border p-4">
                 <Calendar
                     mode="single"

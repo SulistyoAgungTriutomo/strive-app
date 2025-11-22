@@ -1,4 +1,3 @@
-// strive-backend/src/routes/habits.ts
 import { Router, Request, Response } from 'express';
 import { supabase } from '../database';
 import { protect } from '../middleware/auth';
@@ -11,12 +10,18 @@ const getUserId = (req: any): string => req.userId;
 // --- GET HABITS ---
 router.get('/', async (req: any, res: Response) => {
     const userId = getUserId(req);
-    const { data, error } = await supabase.from('habits').select('*').eq('user_id', userId);
+    // Urutkan berdasarkan waktu dibuat agar rapi
+    const { data, error } = await supabase
+        .from('habits')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data);
 });
 
-// --- GET BADGES (Endpoint Baru) ---
+// --- GET BADGES ---
 router.get('/badges', async (req: any, res: Response) => {
     const userId = getUserId(req);
     const { data, error } = await supabase.from('user_badges').select('*').eq('user_id', userId);
@@ -61,15 +66,6 @@ router.post('/', async (req: any, res: Response) => {
     return res.status(201).json(data[0]);
 });
 
-// --- DELETE HABIT ---
-router.delete('/:habitId', async (req: any, res: Response) => {
-    const userId = getUserId(req);
-    const habitId = req.params.habitId;
-    const { error } = await supabase.from('habits').delete().eq('id', habitId).eq('user_id', userId);
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(204).send();
-});
-
 // --- UPDATE HABIT ---
 router.put('/:habitId', async (req: any, res: Response) => {
     const userId = getUserId(req);
@@ -85,17 +81,31 @@ router.put('/:habitId', async (req: any, res: Response) => {
     return res.status(200).json(data[0]);
 });
 
-// --- CHECK-IN with BADGE SYSTEM ---
+// --- DELETE HABIT ---
+router.delete('/:habitId', async (req: any, res: Response) => {
+    const userId = getUserId(req);
+    const habitId = req.params.habitId;
+    const { error } = await supabase.from('habits').delete().eq('id', habitId).eq('user_id', userId);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(204).send();
+});
+
+// --- CHECK-IN (LOGIKA STREAK BARU) ---
 router.post('/:habitId/checkin', async (req: any, res: Response) => {
     const habitId = req.params.habitId;
     const userId = getUserId(req);
     const today = new Date().toISOString().split('T')[0];
+    
+    // Hitung tanggal kemarin
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = yesterdayDate.toISOString().split('T')[0];
 
     try {
-        // 1. Cek Duplikat Check-in
+        // 1. Cek Duplikat Check-in Hari Ini
         const { data: existing } = await supabase
             .from('progress')
-            .select('*')
+            .select('id')
             .eq('habit_id', habitId)
             .eq('completion_date', today)
             .single();
@@ -104,7 +114,7 @@ router.post('/:habitId/checkin', async (req: any, res: Response) => {
             return res.status(400).json({ message: 'Already checked in today.' });
         }
 
-        // 2. Insert Progress
+        // 2. Insert Progress Baru
         const expGained = 10;
         const { error: logError } = await supabase.from('progress').insert({
             habit_id: habitId,
@@ -114,49 +124,107 @@ router.post('/:habitId/checkin', async (req: any, res: Response) => {
         });
         if (logError) throw logError;
 
-        // 3. Update User Stats & Get Updated Data
-        // Kita butuh data terbaru untuk cek Badge
-        const { data: userProfile } = await supabase.from('profiles').select('current_exp, streak_count').eq('id', userId).single();
-        let newStreak = (userProfile?.streak_count || 0); 
+        // 3. === UPDATE HABIT STREAK (Per Habit) ===
+        // Cek apakah habit ini dikerjakan kemarin?
+        const { data: habitYesterday } = await supabase
+            .from('progress')
+            .select('id')
+            .eq('habit_id', habitId)
+            .eq('completion_date', yesterday)
+            .maybeSingle();
+
+        // Ambil data habit saat ini
+        const { data: currentHabit } = await supabase.from('habits').select('current_streak').eq('id', habitId).single();
+        let newHabitStreak = 1;
+
+        if (habitYesterday && currentHabit) {
+            // Jika kemarin dikerjakan, lanjut streak
+            newHabitStreak = (currentHabit.current_streak || 0) + 1;
+        } 
+        // Jika kemarin tidak dikerjakan, streak otomatis jadi 1 (reset)
+
+        // Update streak di tabel habits
+        await supabase.from('habits').update({ current_streak: newHabitStreak }).eq('id', habitId);
+
+
+        // 4. === UPDATE USER STATS & GLOBAL STREAK ===
+        const { data: userProfile } = await supabase.from('profiles').select('current_exp, streak_count, current_level').eq('id', userId).single();
         
+        let leveledUp = false;
+        let newLevel = userProfile?.current_level || 1;
+        let newGlobalStreak = userProfile?.streak_count || 0;
+
         if (userProfile) {
-            newStreak += 1;
+            // Update EXP selalu
+            const newExp = (userProfile.current_exp || 0) + expGained;
+            
+            // Logika Level Up
+            const calculatedLevel = Math.floor(newExp / 100) + 1;
+            if (calculatedLevel > newLevel) {
+                leveledUp = true;
+                newLevel = calculatedLevel;
+            }
+
+            // Logika Global Streak (Hanya update jika ini aktivitas pertama hari ini)
+            // Cek apakah ada log LAIN selain yang barusan kita insert hari ini
+            const { count: todayLogCount } = await supabase
+                .from('progress')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', userId)
+                .eq('completion_date', today);
+
+            // Jika count === 1, berarti ini adalah log PERTAMA hari ini. Kita boleh update streak.
+            if (todayLogCount === 1) {
+                // Cek apakah USER aktif kemarin (di habit apapun)?
+                const { count: yesterdayActivityCount } = await supabase
+                    .from('progress')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', userId)
+                    .eq('completion_date', yesterday);
+
+                if (yesterdayActivityCount && yesterdayActivityCount > 0) {
+                    // Kemarin aktif -> Lanjut Streak
+                    newGlobalStreak += 1;
+                } else {
+                    // Kemarin tidak aktif -> Reset Streak jadi 1
+                    newGlobalStreak = 1;
+                }
+            }
+            // Jika count > 1, berarti user sudah check-in habit lain hari ini. Streak tidak berubah.
+
+            // Simpan ke Database Profil
             await supabase.from('profiles').update({
-                current_exp: (userProfile.current_exp || 0) + expGained,
-                streak_count: newStreak
+                current_exp: newExp,
+                streak_count: newGlobalStreak,
+                current_level: newLevel
             }).eq('id', userId);
         }
 
-        // 4. === BADGE LOGIC ===
+        // 5. === BADGE LOGIC (Sama seperti sebelumnya) ===
         const newBadges: string[] = [];
-
-        // Cek Badge: First Habit (Check-in pertama kali)
-        const { count: progressCount } = await supabase
+        const { count: totalProgress } = await supabase
             .from('progress')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', userId);
         
-        if (progressCount === 1) newBadges.push('first_habit');
+        if (totalProgress === 1) newBadges.push('first_habit');
+        if (newGlobalStreak === 7) newBadges.push('week_streak');
+        if (newGlobalStreak === 30) newBadges.push('month_streak');
+        if (newLevel === 5) newBadges.push('level_5');
+        if (newLevel === 10) newBadges.push('level_10');
 
-        // Cek Badge: Week Warrior (Streak 7)
-        if (newStreak === 7) newBadges.push('week_streak');
-
-        // Cek Badge: Month Master (Streak 30)
-        if (newStreak === 30) newBadges.push('month_streak');
-
-        // Insert Badges (Gunakan upsert/ignore agar tidak error jika duplikat)
         if (newBadges.length > 0) {
-            const badgesToInsert = newBadges.map(name => ({
-                user_id: userId,
-                badge_name: name
-            }));
+            const badgesToInsert = newBadges.map(name => ({ user_id: userId, badge_name: name }));
             await supabase.from('user_badges').upsert(badgesToInsert, { onConflict: 'user_id, badge_name', ignoreDuplicates: true });
         }
 
         return res.status(200).json({ 
             message: 'Check-in successful!', 
             exp_gained: expGained,
-            new_badges: newBadges // Kirim info badge baru ke frontend
+            leveled_up: leveledUp,
+            new_level: newLevel,
+            new_badges: newBadges,
+            habit_streak: newHabitStreak // Kirim balik habit streak untuk update UI instan
         });
 
     } catch (err: any) {

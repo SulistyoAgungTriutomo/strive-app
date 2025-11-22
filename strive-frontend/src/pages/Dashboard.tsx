@@ -22,8 +22,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import confetti from "canvas-confetti";
 
-// IMPOR PENTING: Menggunakan adaptor kita
+// IMPOR PENTING: Menggunakan adaptor 
 import { getHabits, getProfile, addProgress, deleteHabit } from "@/lib/localStorage";
 
 // Definisi tipe untuk data yang kita gunakan
@@ -65,12 +66,43 @@ const Dashboard = () => {
       return await addProgress(habitId); 
     },
     // Ganti 'any' dengan tipe objek yang memiliki message optional
-    onSuccess: (data: { message?: string } | null) => {
+    onSuccess: (data: { message?: string, leveled_up?: boolean, new_level?: number } | null) => {
       queryClient.invalidateQueries({ queryKey: ['habits'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
-      toast.success(data?.message || "Habit checked in! +50 EXP");
+      
+      // LOGIKA CONFETTI
+      if (data?.leveled_up) {
+        // 1. Tampilkan Toast Spesial
+        toast.success(`LEVEL UP! You reached Level ${data.new_level}! 🎉`, {
+            duration: 5000,
+            style: { border: '2px solid #FFD700', fontWeight: 'bold' }
+        });
+
+        // 2. Ledakkan Confetti!
+        const duration = 3 * 1000;
+        const animationEnd = Date.now() + duration;
+        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+        const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+        const interval: any = setInterval(function() {
+          const timeLeft = animationEnd - Date.now();
+
+          if (timeLeft <= 0) {
+            return clearInterval(interval);
+          }
+
+          const particleCount = 50 * (timeLeft / duration);
+          // Tembak dari kiri dan kanan
+          confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+          confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+        }, 250);
+
+      } else {
+        // Toast biasa jika tidak naik level
+        toast.success(data?.message || "Habit checked in! +10 EXP");
+      }
     },
-    // Ganti 'any' dengan tipe 'Error'
     onError: (error: Error) => {
       toast.error(error.message || "Failed to check in");
     },

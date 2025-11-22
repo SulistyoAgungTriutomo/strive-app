@@ -58,7 +58,9 @@ export const authApi = {
         body: formData 
         // Perhatikan: Kita TIDAK melakukan JSON.stringify di sini
     });
-  }
+  },
+
+  getGoogleUrl: () => request("/auth/google", { method: "GET" }),
 };
 
 export const habitsApi = {
