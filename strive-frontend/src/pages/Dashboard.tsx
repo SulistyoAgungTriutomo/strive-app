@@ -60,25 +60,22 @@ const Dashboard = () => {
     ? allHabits.filter((habit: Habit) => habit.frequency && habit.frequency.includes(today))
     : [];
 
-  // 3. Check-in Mutation (PERBAIKAN TIPE DATA DI SINI)
+  // 3. Check-in Mutation
   const toggleHabitMutation = useMutation({
     mutationFn: async (habitId: string) => {
       return await addProgress(habitId); 
     },
-    // Ganti 'any' dengan tipe objek yang memiliki message optional
     onSuccess: (data: { message?: string, leveled_up?: boolean, new_level?: number } | null) => {
       queryClient.invalidateQueries({ queryKey: ['habits'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       
       // LOGIKA CONFETTI
       if (data?.leveled_up) {
-        // 1. Tampilkan Toast Spesial
         toast.success(`LEVEL UP! You reached Level ${data.new_level}! 🎉`, {
             duration: 5000,
             style: { border: '2px solid #FFD700', fontWeight: 'bold' }
         });
 
-        // 2. Ledakkan Confetti!
         const duration = 3 * 1000;
         const animationEnd = Date.now() + duration;
         const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
@@ -93,13 +90,11 @@ const Dashboard = () => {
           }
 
           const particleCount = 50 * (timeLeft / duration);
-          // Tembak dari kiri dan kanan
           confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
           confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
         }, 250);
 
       } else {
-        // Toast biasa jika tidak naik level
         toast.success(data?.message || "Habit checked in! +10 EXP");
       }
     },
@@ -133,9 +128,6 @@ const Dashboard = () => {
     }
   };
 
-  const completedCount = 0; 
-  const totalCount = habits.length;
-  
   if (loadingProfile || loadingHabits) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -177,6 +169,16 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
+
+        {/* --- TOMBOL AKSES JADWAL KULIAH --- */}
+        <Button 
+            variant="secondary" 
+            className="w-full shadow-sm border border-border"
+            onClick={() => navigate("/schedule-input")}
+        >
+            📅 Manage Class Schedule
+        </Button>
+        {/* ----------------------------------- */}
 
         {/* Habits List */}
         <div className="space-y-3">

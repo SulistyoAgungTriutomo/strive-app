@@ -7,8 +7,9 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-// IMPOR PENTING: Gunakan adaptor addHabit dari localStorage.ts
+// IMPOR ADAPTOR & NOTIFIKASI
 import { addHabit } from "@/lib/localStorage";
+import { scheduleHabitReminder } from "@/lib/notifications";
 
 const HABIT_ICONS = ["📚", "💪", "🧘", "💧", "🎓", "🙏", "🎯", "✍️", "🏃", "🎨", "🎵", "🌱"];
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -32,17 +33,37 @@ const AddHabit = () => {
 
   const createHabitMutation = useMutation({
     mutationFn: async (habitData: { name: string; icon_name: string; frequency: string[]; reminder_time: string | null }) => {
-      // Panggil fungsi dari adaptor, bukan supabase langsung
-      return await addHabit({
+      // 1. Simpan ke Database (Backend)
+      const newHabit = await addHabit({
         name: habitData.name,
         icon_name: habitData.icon_name,
         frequency: habitData.frequency,
         reminder_time: habitData.reminder_time,
       });
+
+      // 2. JADWALKAN NOTIFIKASI (Langkah 4)
+      // Jika user set waktu reminder & habit berhasil dibuat
+      if (habitData.reminder_time && newHabit?.id) {
+          try {
+            await scheduleHabitReminder(
+                newHabit.id, 
+                habitData.name, 
+                habitData.reminder_time, 
+                habitData.frequency
+            );
+            console.log("Notification scheduled for:", habitData.name);
+          } catch (err) {
+            console.error("Failed to schedule notification:", err);
+            // Jangan throw error agar habit tetap tersimpan walau notif gagal
+          }
+      }
+
+      return newHabit;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] });
-      toast.success("Habit created!");
+      // Pesan sukses yang lebih informatif
+      toast.success(reminderTime ? "Habit created & Reminder set!" : "Habit created!");
       navigate("/dashboard");
     },
     onError: (error) => {

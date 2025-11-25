@@ -73,3 +73,9 @@ export const habitsApi = {
   getLogs: () => request("/habits/logs"),
   getBadges: () => request("/habits/badges"),
 };
+
+export const scheduleApi = {
+    get: () => request("/schedule"),
+    create: (schedules: any[]) => request("/schedule", { method: "POST", body: JSON.stringify({ schedules }) }),
+    delete: (id: string) => request(`/schedule/${id}`, { method: "DELETE" }),
+};

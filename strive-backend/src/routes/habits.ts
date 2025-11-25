@@ -46,11 +46,41 @@ router.get('/logs', async (req: any, res: Response) => {
     return res.status(200).json(data);
 });
 
-// --- CREATE HABIT ---
+// --- CREATE HABIT (DENGAN VALIDASI JADWAL) ---
 router.post('/', async (req: any, res: Response) => {
     const userId = getUserId(req);
-    const { name, icon_name, frequency } = req.body;
+    
+    // PERBAIKAN 1: Tambahkan 'reminder_time' di sini agar diambil dari request body
+    const { name, icon_name, frequency, reminder_time } = req.body;
 
+    // 1. VALIDASI KONFLIK JADWAL KULIAH
+    if (reminder_time && frequency && frequency.length > 0) {
+        // Ambil jadwal kuliah user
+        const { data: classes } = await supabase
+            .from('class_schedules')
+            .select('*')
+            .eq('user_id', userId);
+
+        if (classes && classes.length > 0) {
+            // Loop setiap hari yang dipilih untuk habit
+            for (const habitDay of frequency) {
+                // Cari kelas di hari yang sama
+                const classesOnDay = classes.filter((c: any) => c.day === habitDay);
+                
+                for (const cls of classesOnDay) {
+                    // PERBAIKAN 2: Gunakan variabel 'reminder_time' yang sudah diambil
+                    // Format waktu biasanya "HH:mm" atau "HH:mm:ss", bisa dibandingkan string langsung
+                    if (reminder_time >= cls.start_time && reminder_time < cls.end_time) {
+                        return res.status(409).json({ 
+                            error: `Conflict! You have class "${cls.course_name}" on ${habitDay} at ${cls.start_time}. Cannot schedule habit.` 
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Jika aman, Insert Habit
     const { data, error } = await supabase
         .from('habits')
         .insert({ 
@@ -58,6 +88,7 @@ router.post('/', async (req: any, res: Response) => {
             name,
             icon_name: icon_name || '📝',
             frequency: frequency || [],
+            reminder_time: reminder_time, // Simpan ke DB
             current_streak: 0
         })
         .select();
