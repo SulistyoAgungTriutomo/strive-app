@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Trash2, Plus, Save, ArrowLeft, Loader2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Trash2, Plus, ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { scheduleApi } from "@/lib/apiClient";
+import { scheduleClassReminder } from "@/lib/notifications";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -42,7 +43,7 @@ const ClassSchedule = () => {
   };
 
   const handleSave = async () => {
-    // Validasi sederhana
+    // 1. Validasi Sederhana
     for (const c of classes) {
         if (!c.course_name || !c.start_time || !c.end_time) {
             toast.error("Please fill in all required fields (Name, Time)");
@@ -56,8 +57,20 @@ const ClassSchedule = () => {
 
     setLoading(true);
     try {
+        // 2. Simpan ke Backend
         await scheduleApi.create(classes);
-        toast.success("Schedule saved successfully!");
+
+        // 3. LANGKAH 2: Jadwalkan Notifikasi untuk Setiap Kelas
+        for (const c of classes) {
+            await scheduleClassReminder(
+                c.course_name,
+                c.day,
+                c.start_time,
+                c.location
+            );
+        }
+
+        toast.success("Schedule saved & Reminders set!");
         navigate("/dashboard");
     } catch (error: any) {
         toast.error(error.message || "Failed to save schedule");

@@ -184,4 +184,28 @@ router.get('/google', async (req, res) => {
     }
 });
 
+router.put('/password', protect, async (req: any, res: Response) => {
+    const userId = req.userId;
+    const { password } = req.body;
+
+    if (!password || password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
+    try {
+        // Menggunakan Admin Auth untuk update password user by ID
+        const { data, error } = await supabase.auth.admin.updateUserById(
+            userId,
+            { password: password }
+        );
+
+        if (error) throw error;
+
+        return res.status(200).json({ message: 'Password updated successfully' });
+    } catch (err: any) {
+        console.error("Password Update Error:", err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;

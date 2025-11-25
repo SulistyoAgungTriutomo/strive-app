@@ -50,6 +50,8 @@ export const authApi = {
   getMe: () => request("/auth/me"),
   updateProfile: (data: { full_name: string }) => request("/auth/me", { method: "PUT", body: JSON.stringify(data) }),
   
+  updatePassword: (password: string) => request("/auth/password", { method: "PUT", body: JSON.stringify({ password }) }),
+
   // Fungsi Upload Avatar (Menggunakan FormData)
   uploadAvatar: (file: File) => {
     const formData = new FormData();

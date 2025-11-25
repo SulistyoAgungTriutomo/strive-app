@@ -1,4 +1,4 @@
-import { habitsApi, authApi } from './apiClient';
+import { habitsApi, authApi, scheduleApi } from './apiClient';
 
 // --- 1. INTERFACES (Tipe Data Diperbarui) ---
 export interface Profile {
@@ -22,6 +22,7 @@ export interface Habit {
   frequency: string[];
   target_completion?: number;
   current_streak?: number;
+  reminder_time?: string | null;
 }
 
 export interface ProgressEntry {
@@ -41,6 +42,14 @@ export interface Badge {
   label?: string;
   icon?: string;
   description?: string;
+}
+export interface ClassSchedule {
+  id: string;
+  course_name: string;
+  day: string;
+  start_time: string;
+  end_time: string;
+  location: string;
 }
 
 // --- 2. TOKEN MANAGEMENT ---
@@ -143,6 +152,16 @@ export const getBadges = async (): Promise<Badge[]> => {
     return Array.isArray(data) ? data : [];
   } catch (e) {
     console.error("Gagal ambil badges:", e);
+    return [];
+  }
+};
+
+export const getSchedules = async (): Promise<ClassSchedule[]> => {
+  try {
+    const data = await scheduleApi.get();
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.error("Gagal ambil jadwal:", e);
     return [];
   }
 };
