@@ -81,3 +81,7 @@ export const scheduleApi = {
     create: (schedules: any[]) => request("/schedule", { method: "POST", body: JSON.stringify({ schedules }) }),
     delete: (id: string) => request(`/schedule/${id}`, { method: "DELETE" }),
 };
+
+export const aiApi =  {
+  getWeeklyReview: () => request("/ai/weekly-review", {method: "GET"}),
+};

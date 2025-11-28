@@ -5,6 +5,7 @@ import authRoutes from './routes/auth';
 import habitRoutes from './routes/habits';
 import './database'; 
 import scheduleRoutes from './routes/schedule';
+import aiRoutes from './routes/ai'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,6 +35,7 @@ app.get('/', (req: Request, res: Response) => {
 app.use('/auth', authRoutes);
 app.use('/habits', habitRoutes); 
 app.use('/schedule', scheduleRoutes);
+app.use('/ai', aiRoutes)
 
 // Global Error Handler
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
