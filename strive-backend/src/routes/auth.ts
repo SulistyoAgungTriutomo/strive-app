@@ -144,19 +144,34 @@ router.post('/avatar', protect, upload.single('avatar'), async (req: any, res: R
 // --- UPDATE PROFILE (PUT /auth/me) ---
 router.put('/me', protect, async (req: any, res: Response) => {
     const userId = req.userId;
-    const { full_name } = req.body; // Kita hanya izinkan ganti nama dulu
+    // Tambahkan onboarding_data ke destructuring
+    const { full_name, email, onboarding_data } = req.body; 
 
     try {
-        const { data, error } = await supabase
-            .from('profiles')
-            .update({ full_name })
-            .eq('id', userId)
-            .select()
-            .single();
+        const updates: any = {};
+        if (full_name) updates.full_name = full_name;
+        // Simpan data onboarding jika ada
+        if (onboarding_data) updates.onboarding_data = onboarding_data; 
 
-        if (error) throw error;
+        if (Object.keys(updates).length > 0) {
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update(updates)
+                .eq('id', userId);
+            
+            if (profileError) throw profileError;
+        }
 
-        return res.status(200).json({ message: 'Profile updated successfully', user: data });
+        // ... (Logika update email) ...
+        if (email) {
+             const { error: authError } = await supabase.auth.admin.updateUserById(
+                userId,
+                { email: email }
+            );
+            if (authError) throw authError;
+        }
+
+        return res.status(200).json({ message: 'Profile updated successfully' });
     } catch (err: any) {
         console.error("Update error:", err);
         return res.status(500).json({ error: err.message });

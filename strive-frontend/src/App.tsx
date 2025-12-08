@@ -16,6 +16,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AuthCallback from "./pages/authCallback"; // Pastikan nama file sesuai (kapitalisasi)
 import { LocalNotifications } from "@capacitor/local-notifications";
 import ClassSchedule from "./pages/ScheduleClass";
+import Onboarding from "./pages/Onboarding";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ const App = () => {
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="*" element={<NotFound />} />
             <Route path="/schedule-input" element={<ProtectedRoute><ClassSchedule /></ProtectedRoute>} />
+            <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>

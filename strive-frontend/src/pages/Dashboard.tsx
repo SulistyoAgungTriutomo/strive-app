@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
-import { Plus, Flame, MoreVertical } from "lucide-react";
+import { Plus, Flame, MoreVertical, CalendarDays } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,17 +24,8 @@ import { Progress } from "@/components/ui/progress";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
 
-// IMPOR PENTING: Menggunakan adaptor 
-import { getHabits, getProfile, addProgress, deleteHabit } from "@/lib/localStorage";
-
-// Definisi tipe untuk data yang kita gunakan
-interface Habit {
-  id: string;
-  name: string;
-  icon_name: string;
-  frequency: string[];
-  current_streak: number;
-}
+// IMPOR ADAPTOR
+import { getHabits, getProfile, addProgress, deleteHabit, Habit } from "@/lib/localStorage";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -55,7 +46,7 @@ const Dashboard = () => {
     queryFn: getHabits,
   });
 
-  // Filter habits untuk hari ini
+  // Filter habit hari ini
   const habits = Array.isArray(allHabits) 
     ? allHabits.filter((habit: Habit) => habit.frequency && habit.frequency.includes(today))
     : [];
@@ -69,41 +60,22 @@ const Dashboard = () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       
-      // LOGIKA CONFETTI
       if (data?.leveled_up) {
         toast.success(`LEVEL UP! You reached Level ${data.new_level}! 🎉`, {
             duration: 5000,
             style: { border: '2px solid #FFD700', fontWeight: 'bold' }
         });
-
-        const duration = 3 * 1000;
-        const animationEnd = Date.now() + duration;
-        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
-
-        const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
-
-        const interval: any = setInterval(function() {
-          const timeLeft = animationEnd - Date.now();
-
-          if (timeLeft <= 0) {
-            return clearInterval(interval);
-          }
-
-          const particleCount = 50 * (timeLeft / duration);
-          confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
-          confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
-        }, 250);
-
+        confetti();
       } else {
-        toast.success(data?.message || "Habit checked in! +10 EXP");
+        toast.success("Habit checked in! +10 EXP");
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to check in");
+      toast.error("Failed to check in");
     },
   });
 
-  // 4. Handle Delete
+  // 4. Delete Mutation
   const deleteHabitMutation = useMutation({
     mutationFn: async (habitId: string) => {
       return await deleteHabit(habitId);
@@ -122,21 +94,19 @@ const Dashboard = () => {
     toggleHabitMutation.mutate(habitId);
   };
 
-  const handleDelete = () => {
+  const handleDeleteConfirm = () => {
     if (habitToDelete) {
       deleteHabitMutation.mutate(habitToDelete);
     }
   };
 
+  // Progress Stats
+  const completedCount = habits.filter(h => h.current_streak > 0).length; // Simplified logic
+  const totalCount = habits.length;
+  const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
   if (loadingProfile || loadingHabits) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
   return (
@@ -156,29 +126,29 @@ const Dashboard = () => {
               Lvl {profile?.current_level || 1}
             </div>
           </div>
-          
-          {/* EXP Bar */}
+
+          {/* Progress Card */}
           <div className="bg-card rounded-2xl p-6 shadow-md space-y-3">
-            <h3 className="font-semibold text-lg">Total Progress</h3>
+            <h3 className="font-semibold text-lg">Today's Progress</h3>
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Total EXP</span>
-                <span className="font-medium text-primary">{profile?.total_exp || 0} EXP</span>
-              </div>
-              <Progress value={(profile?.total_exp || 0) % 100} className="h-2" />
+                <div className="flex justify-between text-sm">
+                    <span>{completedCount} / {totalCount} completed</span>
+                    <span className="font-medium text-primary">{profile?.total_exp || 0} EXP</span>
+                </div>
+                <Progress value={progressPercentage} className="h-2" />
             </div>
           </div>
         </div>
 
-        {/* --- TOMBOL AKSES JADWAL KULIAH --- */}
+        {/* --- TOMBOL MANAGE SCHEDULE (DIKEMBALIKAN) --- */}
         <Button 
-            variant="secondary" 
-            className="w-full shadow-sm border border-border"
+            variant="outline" 
+            className="w-full border-dashed border-2 text-muted-foreground hover:text-primary hover:border-primary"
             onClick={() => navigate("/schedule-input")}
         >
-            📅 Manage Class Schedule
+            <CalendarDays className="mr-2 h-4 w-4" /> Manage Class Schedule
         </Button>
-        {/* ----------------------------------- */}
+        {/* --------------------------------------------- */}
 
         {/* Habits List */}
         <div className="space-y-3">
@@ -201,23 +171,28 @@ const Dashboard = () => {
                     </p>
                   </div>
                 </div>
+
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => handleCheckIn(habit.id)} 
                     disabled={toggleHabitMutation.isPending}
-                    className={`
-                      w-10 h-10 rounded-full border-2 border-primary flex items-center justify-center hover:bg-primary/10 transition-all
-                      ${toggleHabitMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}
-                    `}
+                    className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${toggleHabitMutation.isPending ? 'opacity-50' : 'hover:border-primary'}`}
                   >
                     <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </button>
+
                   <DropdownMenu>
-                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-5 w-5" /></Button></DropdownMenuTrigger>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <MoreVertical className="h-5 w-5" strokeWidth={1.5} />
+                      </Button>
+                    </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setHabitToDelete(habit.id)} className="text-destructive">Delete Habit</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setHabitToDelete(habit.id)} className="text-destructive cursor-pointer">
+                        Delete Habit
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -225,14 +200,16 @@ const Dashboard = () => {
             ))
           )}
         </div>
-        
+
         {/* FAB */}
         <Button onClick={() => navigate("/add-habit")} size="icon" className="fixed bottom-24 right-6 h-14 w-14 rounded-full shadow-lg">
-          <Plus className="h-6 w-6" />
+          <Plus className="h-6 w-6" strokeWidth={1.5} />
         </Button>
       </div>
+
       <BottomNav />
 
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!habitToDelete} onOpenChange={() => setHabitToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -241,7 +218,9 @@ const Dashboard = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -55,24 +55,35 @@ router.post('/', async (req: any, res: Response) => {
 
     // 1. VALIDASI KONFLIK JADWAL KULIAH
     if (reminder_time && frequency && frequency.length > 0) {
-        // Ambil jadwal kuliah user
         const { data: classes } = await supabase
             .from('class_schedules')
             .select('*')
             .eq('user_id', userId);
 
         if (classes && classes.length > 0) {
-            // Loop setiap hari yang dipilih untuk habit
+            // Helper: Konversi "HH:MM" atau "HH:MM:SS" ke total menit
+            const toMinutes = (timeStr: string) => {
+                const [h, m] = timeStr.split(':').map(Number);
+                return (h * 60) + m;
+            };
+
+            const habitTimeMinutes = toMinutes(reminder_time);
+
             for (const habitDay of frequency) {
                 // Cari kelas di hari yang sama
+                // Note: Pastikan format hari di DB ('Monday') sama dengan input ('Monday')
                 const classesOnDay = classes.filter((c: any) => c.day === habitDay);
                 
                 for (const cls of classesOnDay) {
-                    // PERBAIKAN 2: Gunakan variabel 'reminder_time' yang sudah diambil
-                    // Format waktu biasanya "HH:mm" atau "HH:mm:ss", bisa dibandingkan string langsung
-                    if (reminder_time >= cls.start_time && reminder_time < cls.end_time) {
+                    const startMinutes = toMinutes(cls.start_time);
+                    const endMinutes = toMinutes(cls.end_time);
+
+                    // Logika Konflik:
+                    // Habit dimulai SETELAH atau TEPAT saat kelas mulai
+                    // DAN Habit dimulai SEBELUM kelas selesai
+                    if (habitTimeMinutes >= startMinutes && habitTimeMinutes < endMinutes) {
                         return res.status(409).json({ 
-                            error: `Conflict! You have class "${cls.course_name}" on ${habitDay} at ${cls.start_time}. Cannot schedule habit.` 
+                            error: `Conflict! You have class "${cls.course_name}" on ${habitDay} (${cls.start_time.slice(0,5)} - ${cls.end_time.slice(0,5)}). Cannot schedule habit at ${reminder_time}.` 
                         });
                     }
                 }

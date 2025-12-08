@@ -11,7 +11,16 @@ router.get('/weekly-review', protect, async (req: any, res: Response) => {
 
     try {
         // 1. Ambil Data
-        const { data: profile } = await supabase.from('profiles').select('full_name, current_level').eq('id', userId).single();
+        // UPDATE: Tambahkan 'onboarding_data' ke dalam select agar datanya terambil
+        const { data: profileData } = await supabase
+            .from('profiles')
+            .select('full_name, current_level, onboarding_data') 
+            .eq('id', userId)
+            .single();
+            
+        // UPDATE: Cast ke 'any' agar TypeScript tidak komplain soal tipe data baru
+        const profile: any = profileData; 
+
         const { data: habits } = await supabase.from('habits').select('id, name, frequency').eq('user_id', userId);
         
         const sevenDaysAgo = new Date();
@@ -22,7 +31,6 @@ router.get('/weekly-review', protect, async (req: any, res: Response) => {
             .gte('completion_date', sevenDaysAgo.toISOString());
 
         // 2. BUAT PEMETAAN ID KE NAMA (Mapping)
-        // Agar AI tahu ID "abc-123" itu habit "Lari Pagi"
         const habitMap = habits?.reduce((acc: any, habit: any) => {
             acc[habit.id] = habit.name;
             return acc;
@@ -34,26 +42,35 @@ router.get('/weekly-review', protect, async (req: any, res: Response) => {
             date: log.completion_date
         }));
 
+        // AMBIL DATA ONBOARDING (Sekarang aman karena profile sudah di-cast ke any)
+        const userPersona = profile?.onboarding_data || {};
+
         // 3. Prompt yang Lebih Jelas
         const prompt = `
         Act as a motivational Habit Coach named "Strive AI".
-        User Name: ${profile?.full_name} (Level ${profile?.current_level}).
         
-        User's Habits Goals:
-        ${JSON.stringify(habits?.map(h => ({ name: h.name, freq: h.frequency })))}
+        USER PROFILE:
+        - Name: ${profile?.full_name} (Level ${profile?.current_level})
+        - Main Goal: ${userPersona.primaryGoal || "General Improvement"}
+        - Biggest Struggle: ${userPersona.biggestStruggle || "Consistency"}
+        - Daily Routine: ${userPersona.routineType || "Flexible"}
         
-        User's Activity Log (Last 7 Days):
-        ${JSON.stringify(humanReadableLogs)}
+        CURRENT HABITS:
+        ${JSON.stringify(habits)}
         
-        Task:
-        1. Analyze their performance based on the logs. Mention specific habit names.
-        2. Give a short, energetic summary (max 2 sentences).
-        3. Provide 1 specific actionable tip to improve next week.
-        4. Use emojis. Be friendly but disciplined.
+        ACTIVITY LOG (Last 7 Days):
+        ${JSON.stringify(humanReadableLogs)} 
+        
+        TASK:
+        1. Analyze their performance based on the logs.
+        2. RELATE your advice to their "Main Goal" and "Biggest Struggle" mentioned in their User Profile. (e.g., if they struggle with time, suggest shorter habits).
+        3. Give a short, energetic summary.
+        4. Provide 1 specific actionable tip.
+        5. Use emojis. Be friendly, empathetic, but disciplined.
         `;
 
         // 4. Panggil Gemini
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); // Pakai model terbaru Anda
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();

@@ -6,8 +6,6 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-
-// IMPOR ADAPTOR & NOTIFIKASI
 import { addHabit } from "@/lib/localStorage";
 import { scheduleHabitReminder } from "@/lib/notifications";
 
@@ -25,65 +23,36 @@ const AddHabit = () => {
 
   const toggleDay = (day: string) => {
     setSelectedDays(prev =>
-      prev.includes(day)
-        ? prev.filter(d => d !== day)
-        : [...prev, day]
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
     );
   };
 
   const createHabitMutation = useMutation({
     mutationFn: async (habitData: { name: string; icon_name: string; frequency: string[]; reminder_time: string | null }) => {
-      // 1. Simpan ke Database (Backend)
-      const newHabit = await addHabit({
-        name: habitData.name,
-        icon_name: habitData.icon_name,
-        frequency: habitData.frequency,
-        reminder_time: habitData.reminder_time,
-      });
-
-      // 2. JADWALKAN NOTIFIKASI (Langkah 4)
-      // Jika user set waktu reminder & habit berhasil dibuat
+      const newHabit = await addHabit(habitData);
       if (habitData.reminder_time && newHabit?.id) {
           try {
-            await scheduleHabitReminder(
-                newHabit.id, 
-                habitData.name, 
-                habitData.reminder_time, 
-                habitData.frequency
-            );
-            console.log("Notification scheduled for:", habitData.name);
-          } catch (err) {
-            console.error("Failed to schedule notification:", err);
-            // Jangan throw error agar habit tetap tersimpan walau notif gagal
-          }
+            await scheduleHabitReminder(newHabit.id, habitData.name, habitData.reminder_time, habitData.frequency);
+          } catch (err) { console.error(err); }
       }
-
       return newHabit;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] });
-      // Pesan sukses yang lebih informatif
-      toast.success(reminderTime ? "Habit created & Reminder set!" : "Habit created!");
+      toast.success("Habit created!");
       navigate("/dashboard");
     },
-    onError: (error) => {
-      toast.error("Failed to create habit");
-      console.error(error);
+    onError: (error: any) => { // Tangkap error dari backend
+        console.error("Error Create:", error);
+        // Tampilkan pesan error spesifik (misal konflik jadwal)
+        toast.error(error.message || "Failed to create habit"); 
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!habitName.trim()) {
-      toast.error("Please enter a habit name");
-      return;
-    }
-
-    if (selectedDays.length === 0) {
-      toast.error("Please select at least one day");
-      return;
-    }
+    if (!habitName.trim()) return toast.error("Please enter a habit name");
+    if (selectedDays.length === 0) return toast.error("Please select at least one day");
 
     createHabitMutation.mutate({
       name: habitName.trim(),
@@ -97,33 +66,31 @@ const AddHabit = () => {
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto p-6 space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 relative z-10">
+          {/* TOMBOL BACK YANG DIPERBAIKI */}
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate("/dashboard")} // Pastikan ini mengarah ke /dashboard
+            className="hover:bg-muted/50 -ml-2"
           >
-            <ArrowLeft className="h-6 w-6" strokeWidth={1.5} />
+            <ArrowLeft className="h-6 w-6" strokeWidth={2} />
           </Button>
           <h1 className="text-2xl font-bold">Add New Habit</h1>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Habit Name */}
           <div className="space-y-2">
             <Label htmlFor="habitName">Habit Name</Label>
             <Input
               id="habitName"
-              type="text"
-              placeholder="e.g., Read a Book"
               value={habitName}
               onChange={(e) => setHabitName(e.target.value)}
               disabled={createHabitMutation.isPending}
             />
           </div>
 
-          {/* Icon Selector */}
           <div className="space-y-3">
             <Label>Choose an Icon</Label>
             <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
@@ -132,14 +99,7 @@ const AddHabit = () => {
                   key={icon}
                   type="button"
                   onClick={() => setSelectedIcon(icon)}
-                  className={`
-                    aspect-square rounded-xl flex items-center justify-center text-4xl
-                    transition-all duration-200
-                    ${selectedIcon === icon
-                      ? 'bg-primary text-primary-foreground scale-110 ring-2 ring-primary'
-                      : 'bg-card hover:bg-muted'
-                    }
-                  `}
+                  className={`aspect-square rounded-xl flex items-center justify-center text-4xl transition-all ${selectedIcon === icon ? 'bg-primary text-primary-foreground ring-2 ring-primary' : 'bg-card hover:bg-muted'}`}
                 >
                   {icon}
                 </button>
@@ -147,7 +107,6 @@ const AddHabit = () => {
             </div>
           </div>
 
-          {/* Frequency Selector */}
           <div className="space-y-3">
             <Label>Frequency (Select Days)</Label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -156,14 +115,7 @@ const AddHabit = () => {
                   key={day}
                   type="button"
                   onClick={() => toggleDay(day)}
-                  className={`
-                    py-3 px-4 rounded-xl font-medium text-sm
-                    transition-all duration-200
-                    ${selectedDays.includes(day)
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-card text-foreground hover:bg-muted'
-                    }
-                  `}
+                  className={`py-3 px-4 rounded-xl font-medium text-sm transition-all ${selectedDays.includes(day) ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground hover:bg-muted'}`}
                 >
                   {day.slice(0, 3)}
                 </button>
@@ -171,7 +123,6 @@ const AddHabit = () => {
             </div>
           </div>
 
-          {/* Reminder Time */}
           <div className="space-y-2">
             <Label htmlFor="reminderTime">Reminder Time (Optional)</Label>
             <Input
@@ -183,21 +134,8 @@ const AddHabit = () => {
             />
           </div>
 
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            className="w-full"
-            size="lg"
-            disabled={createHabitMutation.isPending}
-          >
-            {createHabitMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" strokeWidth={1.5} />
-                Creating Habit...
-              </>
-            ) : (
-              "Create Habit"
-            )}
+          <Button type="submit" className="w-full" size="lg" disabled={createHabitMutation.isPending}>
+            {createHabitMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Create Habit"}
           </Button>
         </form>
       </div>

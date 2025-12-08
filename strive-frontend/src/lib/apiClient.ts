@@ -48,7 +48,8 @@ export const authApi = {
   register: (payload: ApiPayload) => request("/auth/signup", { method: "POST", body: JSON.stringify(payload) }),
   login: (payload: ApiPayload) => request("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   getMe: () => request("/auth/me"),
-  updateProfile: (data: { full_name: string }) => request("/auth/me", { method: "PUT", body: JSON.stringify(data) }),
+  updateProfile: (data: { full_name?: string; email?: string; onboarding_data?: any }) => 
+    request("/auth/me", { method: "PUT", body: JSON.stringify(data) }),
   
   updatePassword: (password: string) => request("/auth/password", { method: "PUT", body: JSON.stringify({ password }) }),
 

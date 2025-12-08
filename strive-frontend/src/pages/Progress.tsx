@@ -1,15 +1,31 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress as ProgressBar } from "@/components/ui/progress";
-import { Trophy, Flame, Target, Sparkles, Bot, Loader2 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { getProfile, getHabits, getProgress, getBadges, ProgressEntry, Badge } from "@/lib/localStorage";
+import { Trophy, Flame, Target, Sparkles, Bot, Loader2, BookOpen, MapPin, Clock, CheckCircle2, Circle, MoreHorizontal, Trash2, Zap, BarChart3 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getProfile, getHabits, getProgress, getSchedules, getBadges, deleteHabit, ProgressEntry, ClassSchedule, Habit, Badge } from "@/lib/localStorage";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { aiApi } from "@/lib/apiClient";
 import ReactMarkdown from 'react-markdown';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const ALL_BADGES = [
   { name: "first_habit", label: "First Step", icon: "🚀", description: "Complete your first habit" },
@@ -20,31 +36,76 @@ const ALL_BADGES = [
 ];
 
 const Progress = () => {
+  const queryClient = useQueryClient();
+
+  // 1. FETCH DATA
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
   const { data: allHabits = [] } = useQuery({ queryKey: ['habits'], queryFn: getHabits });
   const { data: progressLogs = [] } = useQuery({ queryKey: ['progress'], queryFn: getProgress });
-  
+  const { data: schedules = [] } = useQuery({ queryKey: ['schedules'], queryFn: getSchedules });
   const { data: userBadges = [] } = useQuery({ queryKey: ['badges'], queryFn: getBadges });
 
   const habits = Array.isArray(allHabits) ? allHabits : [];
   const logs = Array.isArray(progressLogs) ? progressLogs : [];
+  const classList = Array.isArray(schedules) ? schedules : [];
   const earnedBadgeNames = new Set(userBadges?.map((b: Badge) => b.badge_name));
 
+  // 2. STATE & FILTERING
   const activeDates = logs.map((log: ProgressEntry) => new Date(log.completion_date));
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [habitToDelete, setHabitToDelete] = useState<string | null>(null);
 
-  const logsForSelectedDate = logs.filter((log: ProgressEntry) => {
-    if (!selectedDate) return false;
-    const year = selectedDate.getFullYear();
-    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(selectedDate.getDate()).padStart(2, '0');
-    const selectedDateStr = `${year}-${month}-${day}`;
-    return log.completion_date === selectedDateStr;
+  const getSelectedDateStr = () => {
+      if (!selectedDate) return "";
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+  }
+  const selectedDateStr = getSelectedDateStr();
+  const selectedDayName = selectedDate?.toLocaleDateString('en-US', { weekday: 'long' });
+
+  const logsForSelectedDate = logs.filter((log: ProgressEntry) => log.completion_date === selectedDateStr);
+  const completedHabitIds = new Set(logsForSelectedDate.map((log: any) => log.habit_id));
+
+  const upcomingHabits = habits.filter((habit: Habit) => {
+      const isScheduledToday = habit.frequency.includes(selectedDayName || "");
+      const isNotCompleted = !completedHabitIds.has(habit.id);
+      return isScheduledToday && isNotCompleted;
   });
+
+  const classesForSelectedDate = classList.filter((cls: ClassSchedule) => {
+      return cls.day === selectedDayName;
+  }).sort((a, b) => a.start_time.localeCompare(b.start_time));
 
   const expForNextLevel = 100; 
   const expProgress = ((profile?.total_exp || 0) % expForNextLevel); 
 
+  // --- STATISTIK ---
+  
+  // 1. Total Habits Crushed
+  const totalHabitsCrushed = logs.length;
+
+  // 2. Weekly Consistency Score (%)
+  const calculateConsistency = () => {
+      if (habits.length === 0) return 0;
+      
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const recentLogs = logs.filter((log: ProgressEntry) => 
+          new Date(log.completion_date) >= sevenDaysAgo
+      ).length;
+
+      const maxPossibleLogs = habits.length * 7; 
+      if (maxPossibleLogs === 0) return 0;
+
+      const score = Math.round((recentLogs / maxPossibleLogs) * 100);
+      return score > 100 ? 100 : score;
+  };
+  const consistencyScore = calculateConsistency();
+
+  // --- AI LOGIC ---
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
 
@@ -61,12 +122,31 @@ const Progress = () => {
     }
   };
 
+  // --- DELETE LOGIC ---
+  const deleteHabitMutation = useMutation({
+    mutationFn: async (habitId: string) => {
+      return await deleteHabit(habitId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      toast.success("Habit deleted successfully");
+      setHabitToDelete(null);
+    },
+    onError: () => {
+      toast.error("Failed to delete habit");
+    },
+  });
+
+  const handleDeleteConfirm = () => {
+    if (habitToDelete) deleteHabitMutation.mutate(habitToDelete);
+  };
+
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <div className="max-w-2xl mx-auto p-4 space-y-4"> {/* Reduced padding & space */}
+    <div className="min-h-screen bg-background pb-24">
+      <div className="max-w-2xl mx-auto p-4 space-y-4">
         <h1 className="text-2xl font-bold mb-2">Your Progress</h1>
 
-        {/* AI Coach Section */}
+        {/* AI Coach */}
         <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-4 shadow-md text-white space-y-3 relative overflow-hidden">
             <div className="flex items-center justify-between relative z-10">
                 <div className="flex items-center gap-2">
@@ -83,41 +163,35 @@ const Progress = () => {
                     {loadingAI ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Sparkles className="h-3 w-3 mr-1.5" /> Analyze Me</>}
                 </Button>
             </div>
-            
             {aiInsight ? (
                 <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2 border border-white/10 max-h-60 overflow-y-auto custom-scrollbar">
                     <div className="prose prose-invert prose-sm max-w-none text-xs leading-relaxed">
-                        <ReactMarkdown
-                            components={{
+                        <ReactMarkdown components={{
                                 strong: ({node, ...props}) => <span className="font-bold text-yellow-300" {...props} />,
                                 ul: ({node, ...props}) => <ul className="list-disc pl-4 space-y-1 my-1" {...props} />,
                                 li: ({node, ...props}) => <li className="text-white/90" {...props} />,
                                 p: ({node, ...props}) => <p className="mb-1.5 last:mb-0" {...props} />
                             }}
-                        >
-                            {aiInsight}
-                        </ReactMarkdown>
+                        >{aiInsight}</ReactMarkdown>
                     </div>
                 </div>
             ) : (
-                <p className="text-xs text-white/80 leading-snug">
-                    Need advice? Ask AI to analyze your weekly progress!
-                </p>
+                <p className="text-xs text-white/80 leading-snug">Need advice? Ask AI to analyze your weekly progress!</p>
             )}
         </div>
 
-        {/* User Level Card */}
+        {/* Level Card */}
         <div className="bg-card rounded-xl p-4 shadow-sm space-y-3 border">
             <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold">Level {profile?.current_level || 1}</h3>
-            <Trophy className="h-5 w-5 text-level" strokeWidth={1.5} />
+                <h3 className="text-lg font-bold">Level {profile?.current_level || 1}</h3>
+                <Trophy className="h-5 w-5 text-level" strokeWidth={1.5} />
             </div>
             <div className="space-y-1.5">
-            <div className="flex justify-between text-xs text-muted-foreground">
-                <span>EXP Progress</span>
-                <span className="font-medium text-foreground">{expProgress} / {expForNextLevel}</span>
-            </div>
-            <ProgressBar value={expProgress} className="h-2" />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>EXP Progress</span>
+                    <span className="font-medium text-foreground">{expProgress} / {expForNextLevel}</span>
+                </div>
+                <ProgressBar value={expProgress} className="h-2" />
             </div>
         </div>
 
@@ -127,6 +201,7 @@ const Progress = () => {
             <TabsTrigger value="stats" className="text-xs">Statistics</TabsTrigger>
           </TabsList>
 
+          {/* TAB CALENDAR */}
           <TabsContent value="calendar" className="space-y-4">
              <div className="bg-card rounded-xl shadow-sm border p-2">
                 <Calendar
@@ -161,50 +236,133 @@ const Progress = () => {
 
              <div className="space-y-3">
                 <h3 className="font-semibold text-sm border-b pb-1">
-                    Activity on {selectedDate?.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    Agenda for {selectedDate?.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </h3>
                 
-                {logsForSelectedDate.length > 0 ? (
-                    logsForSelectedDate.map((log: any) => {
-                        const habit = habits.find((h: any) => h.id === log.habit_id);
-                        return (
-                            <div key={log.id} className="bg-card p-3 rounded-lg shadow-sm border flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-xl">{habit?.icon_name || '📝'}</span>
-                                    <div>
-                                        <p className="font-medium text-sm">{habit?.name || 'Unknown Habit'}</p>
-                                        <p className="text-[10px] text-green-600 font-medium">Completed</p>
+                {classesForSelectedDate.length > 0 && (
+                    <div className="space-y-2">
+                         <h4 className="text-[10px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1">
+                            <BookOpen className="h-3 w-3" /> Classes
+                        </h4>
+                        {classesForSelectedDate.map((cls) => (
+                            <div key={cls.id} className="bg-blue-50/50 border border-blue-100 p-3 rounded-lg flex flex-col gap-1 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <div className="font-semibold text-foreground text-sm">{cls.course_name}</div>
+                                    <div className="text-[10px] font-mono bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                                        {cls.start_time.slice(0,5)} - {cls.end_time.slice(0,5)}
                                     </div>
                                 </div>
-                                <div className="bg-accent/50 px-2 py-0.5 rounded text-[10px] font-bold">
-                                    +{log.exp_earned || 10} EXP
+                                {cls.location && (
+                                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                        <MapPin className="h-3 w-3" /> <span>{cls.location}</span>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {upcomingHabits.length > 0 && (
+                    <div className="space-y-2">
+                         <h4 className="text-[10px] font-bold text-orange-500 uppercase tracking-wider flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> To Do
+                        </h4>
+                        {upcomingHabits.map((habit) => (
+                            <div key={habit.id} className="bg-card p-3 rounded-lg shadow-sm border border-orange-100/50 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg grayscale opacity-70">{habit.icon_name || '📝'}</span>
+                                    <div>
+                                        <p className="font-medium text-sm text-foreground">{habit.name}</p>
+                                        <p className="text-[10px] text-orange-500 flex items-center gap-1">
+                                            <Circle className="h-2 w-2 fill-orange-200" /> Pending
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    {habit.reminder_time && (
+                                        <div className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+                                            {habit.reminder_time}
+                                        </div>
+                                    )}
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                                                <MoreHorizontal className="h-4 w-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => setHabitToDelete(habit.id)} className="text-destructive cursor-pointer">
+                                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
                             </div>
-                        );
-                    })
-                ) : (
-                    <div className="text-center py-6 px-4 bg-muted/20 rounded-lg border-dashed border-2">
-                        <p className="text-xs text-muted-foreground">No activity recorded.</p>
+                        ))}
+                    </div>
+                )}
+
+                {logsForSelectedDate.length > 0 && (
+                    <div className="space-y-2">
+                        <h4 className="text-[10px] font-bold text-green-600 uppercase tracking-wider flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Completed
+                        </h4>
+                        {logsForSelectedDate.map((log: any) => {
+                            const habit = habits.find((h: any) => h.id === log.habit_id);
+                            return (
+                                <div key={log.id} className="bg-card p-3 rounded-lg shadow-sm border flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">{habit?.icon_name || '📝'}</span>
+                                        <div>
+                                            <p className="font-medium text-sm">{habit?.name || 'Unknown Habit'}</p>
+                                            <p className="text-[10px] text-green-600 font-medium">Done</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-accent/30 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                                        +{log.exp_earned || 10} EXP
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {classesForSelectedDate.length === 0 && logsForSelectedDate.length === 0 && upcomingHabits.length === 0 && (
+                    <div className="text-center py-8 px-4 bg-muted/20 rounded-lg border-dashed border-2">
+                        <p className="text-xs text-muted-foreground">No classes or activity for this day.</p>
                     </div>
                 )}
              </div>
           </TabsContent>
 
+          {/* TAB STATISTICS (CLEAN: GRID + BADGES ONLY) */}
           <TabsContent value="stats" className="space-y-4">
+             
+             {/* 1. STATS GRID (4 KARTU) */}
              <div className="grid grid-cols-2 gap-3">
                 <div className="bg-card rounded-xl p-4 shadow-sm text-center border">
                     <Target className="h-6 w-6 text-primary mx-auto mb-1" strokeWidth={1.5} />
                     <p className="text-xl font-bold">{habits.length}</p>
-                    <p className="text-xs text-muted-foreground">Habits</p>
+                    <p className="text-xs text-muted-foreground">Active Habits</p>
                 </div>
                 <div className="bg-card rounded-xl p-4 shadow-sm text-center border">
                     <Flame className="h-6 w-6 text-streak mx-auto mb-1" strokeWidth={1.5} />
                     <p className="text-xl font-bold">{profile?.longest_streak || 0}</p>
                     <p className="text-xs text-muted-foreground">Best Streak</p>
                 </div>
+                <div className="bg-card rounded-xl p-4 shadow-sm text-center border">
+                    <BarChart3 className="h-6 w-6 text-blue-500 mx-auto mb-1" strokeWidth={1.5} />
+                    <p className="text-xl font-bold">{consistencyScore}%</p>
+                    <p className="text-xs text-muted-foreground">Consistency (7d)</p>
+                </div>
+                <div className="bg-card rounded-xl p-4 shadow-sm text-center border">
+                    <Zap className="h-6 w-6 text-yellow-500 mx-auto mb-1" strokeWidth={1.5} />
+                    <p className="text-xl font-bold">{totalHabitsCrushed}</p>
+                    <p className="text-xs text-muted-foreground">Total Done</p>
+                </div>
             </div>
 
-            {/* Badges */}
+            {/* 2. BADGES */}
             <div className="bg-card rounded-xl p-4 shadow-sm space-y-3 border">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <Trophy className="h-4 w-4 text-yellow-500" strokeWidth={1.5} />
@@ -217,7 +375,7 @@ const Progress = () => {
                     <div
                       key={badge.name}
                       className={`
-                        text-center p-2 rounded-lg border
+                        text-center p-2 rounded-lg border flex flex-col items-center justify-center
                         ${isEarned ? 'bg-primary/5 border-primary/20' : 'bg-muted/30 border-transparent opacity-40 grayscale'}
                       `}
                     >
@@ -232,6 +390,24 @@ const Progress = () => {
         </Tabs>
       </div>
       <BottomNav />
+
+      {/* Delete Dialog */}
+      <AlertDialog open={!!habitToDelete} onOpenChange={() => setHabitToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Habit?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the habit from your future schedule.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteHabitMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

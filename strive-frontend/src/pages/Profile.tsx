@@ -27,9 +27,13 @@ const Profile = () => {
   
   // State untuk form
   const [editName, setEditName] = useState("");
+  const [newEmail, setNewEmail] = useState(""); // State untuk ganti email
+  
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false); // Dialog baru
   
   // 1. Fetch Profile
   const { data: profile, isLoading } = useQuery({
@@ -39,8 +43,9 @@ const Profile = () => {
 
   // Update state form saat data profil dimuat
   useEffect(() => {
-    if (profile?.full_name) {
-      setEditName(profile.full_name);
+    if (profile) {
+      setEditName(profile.full_name || "");
+      // Email tidak perlu di-set ke state editName, karena sekarang terpisah
     }
   }, [profile]);
 
@@ -64,7 +69,7 @@ const Profile = () => {
     });
   };
 
-  // 3. Mutasi: Update Profile (Nama)
+  // 3. Mutasi: Update Profile (Hanya Nama)
   const updateProfileMutation = useMutation({
     mutationFn: async () => {
         return await authApi.updateProfile({ full_name: editName });
@@ -94,6 +99,22 @@ const Profile = () => {
     }
   });
 
+  // 5. Mutasi: Update Email (BARU)
+  const updateEmailMutation = useMutation({
+    mutationFn: async () => {
+       return await authApi.updateProfile({ email: newEmail });
+    },
+    onSuccess: () => {
+        setNewEmail("");
+        setIsEmailDialogOpen(false);
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
+        toast.success("Email updated successfully!");
+    },
+    onError: (error: Error) => {
+        toast.error(error.message || "Failed to update email");
+    }
+  });
+
   const handleSignOut = () => {
     removeToken();
     navigate("/signin");
@@ -116,7 +137,6 @@ const Profile = () => {
         <div className="text-center space-y-4 pt-4">
           <div className="relative inline-block">
             <div className="relative w-32 h-32 mx-auto">
-              {/* Ring Biru Tipis (border-2 border-primary) */}
               <div className="w-full h-full rounded-full border-2 border-primary overflow-hidden bg-muted flex items-center justify-center relative">
                  {profile?.avatar_url ? (
                     <img src={`${profile.avatar_url}?t=${new Date().getTime()}`} alt="Profile" className="w-full h-full object-cover" />
@@ -127,7 +147,6 @@ const Profile = () => {
                  )}
               </div>
               
-              {/* Tombol Kamera Floating */}
               <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-primary text-primary-foreground rounded-full p-2 cursor-pointer hover:bg-primary/90 transition-colors shadow-lg">
                 <Camera className="h-5 w-5" strokeWidth={1.5} />
                 <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={uploadAvatar} />
@@ -137,6 +156,7 @@ const Profile = () => {
           <div>
             <h1 className="text-2xl font-bold text-foreground">{profile?.full_name || "User"}</h1>
             <p className="text-muted-foreground text-sm">Level {profile?.current_level || 1} • {profile?.total_exp} EXP</p>
+            <p className="text-xs text-muted-foreground mt-1">{profile?.email}</p>
           </div>
         </div>
 
@@ -156,33 +176,13 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* --- SECTION 3: PERSONAL INFO --- */}
+        {/* --- SECTION 3: PERSONAL INFO (HANYA NAMA) --- */}
         <div className="space-y-4">
             <h3 className="font-semibold text-lg flex items-center gap-2">
                 <UserIcon className="h-5 w-5 text-primary" /> Personal Info
             </h3>
             <div className="bg-card border rounded-2xl p-6 shadow-sm space-y-4">
                 
-                {/* Email Section - READABLE */}
-                <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <div className="relative">
-                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input 
-                            id="email" 
-                            value={profile?.email || ""} 
-                            readOnly // Supaya tidak bisa diketik
-                            disabled // Supaya tidak bisa difokuskan
-                            // Style: Teks hitam (foreground), background agak abu, border biasa
-                            className="pl-9 pr-10 bg-muted/20 text-foreground font-medium opacity-100 cursor-default"
-                        />
-                        <Lock className="absolute right-3 top-3 h-4 w-4 text-muted-foreground/50" />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground ml-1">
-                        Email cannot be changed.
-                    </p>
-                </div>
-
                 {/* Full Name Section */}
                 <div className="space-y-2">
                     <Label htmlFor="fullName">Full Name</Label>
@@ -205,14 +205,55 @@ const Profile = () => {
             </div>
         </div>
 
-        {/* --- SECTION 4: SECURITY & DANGER ZONE --- */}
+        {/* --- SECTION 4: SECURITY (PASSWORD & EMAIL) --- */}
         <div className="space-y-4">
             <h3 className="font-semibold text-lg flex items-center gap-2">
                 <Shield className="h-5 w-5 text-primary" /> Security
             </h3>
             <div className="bg-card border rounded-2xl p-1 shadow-sm divide-y">
                 
-                {/* Change Password Dialog */}
+                {/* 1. Change Email Dialog */}
+                <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
+                    <DialogTrigger asChild>
+                        <button className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors text-left">
+                            <div className="flex flex-col">
+                                <span className="font-medium">Change Email Address</span>
+                                <span className="text-xs text-muted-foreground">Update your login email</span>
+                            </div>
+                            <Mail className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Change Email</DialogTitle>
+                            <DialogDescription>
+                                Enter your new email address below. You may need to verify it.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Label>New Email</Label>
+                                <Input 
+                                    type="email" 
+                                    value={newEmail}
+                                    onChange={(e) => setNewEmail(e.target.value)}
+                                    placeholder="new@example.com"
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cancel</Button>
+                            <Button 
+                                onClick={() => updateEmailMutation.mutate()}
+                                disabled={!newEmail || !newEmail.includes('@')}
+                            >
+                                {updateEmailMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Update Email"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* 2. Change Password Dialog */}
                 <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
                     <DialogTrigger asChild>
                         <button className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors text-left">
@@ -220,7 +261,7 @@ const Profile = () => {
                                 <span className="font-medium">Change Password</span>
                                 <span className="text-xs text-muted-foreground">Update your password regularly</span>
                             </div>
-                            <Shield className="h-4 w-4 text-muted-foreground" />
+                            <Lock className="h-4 w-4 text-muted-foreground" />
                         </button>
                     </DialogTrigger>
                     <DialogContent>
@@ -262,7 +303,7 @@ const Profile = () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* Sign Out */}
+                {/* 3. Sign Out */}
                 <button 
                     onClick={handleSignOut}
                     className="w-full flex items-center justify-between p-4 hover:bg-red-50 transition-colors text-left text-destructive"

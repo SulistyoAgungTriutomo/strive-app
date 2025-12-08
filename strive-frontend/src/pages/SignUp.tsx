@@ -41,7 +41,7 @@ const SignUp = () => {
       if (response?.session?.access_token) {
           saveToken(response.session.access_token);
           toast.success("Account created! Welcome to Strive!");
-          navigate("/dashboard");
+          navigate("/onboarding");
       } else {
           toast.success("Account created! Please sign in.");
           navigate("/signin");
