@@ -11,14 +11,13 @@ router.get('/weekly-review', protect, async (req: any, res: Response) => {
 
     try {
         // 1. Ambil Data
-        // UPDATE: Tambahkan 'onboarding_data' ke dalam select agar datanya terambil
         const { data: profileData } = await supabase
             .from('profiles')
             .select('full_name, current_level, onboarding_data') 
             .eq('id', userId)
             .single();
             
-        // UPDATE: Cast ke 'any' agar TypeScript tidak komplain soal tipe data baru
+        // Cast ke 'any' agar TypeScript aman membaca onboarding_data
         const profile: any = profileData; 
 
         const { data: habits } = await supabase.from('habits').select('id, name, frequency').eq('user_id', userId);
@@ -30,29 +29,37 @@ router.get('/weekly-review', protect, async (req: any, res: Response) => {
             .eq('user_id', userId)
             .gte('completion_date', sevenDaysAgo.toISOString());
 
-        // 2. BUAT PEMETAAN ID KE NAMA (Mapping)
+        // 2. Mapping ID ke Nama Habit
         const habitMap = habits?.reduce((acc: any, habit: any) => {
             acc[habit.id] = habit.name;
             return acc;
         }, {});
 
-        // Ganti ID di logs dengan Nama Habit untuk dikirim ke AI
         const humanReadableLogs = logs?.map((log: any) => ({
             habit_name: habitMap[log.habit_id] || "Unknown Habit",
             date: log.completion_date
         }));
 
-        // AMBIL DATA ONBOARDING (Sekarang aman karena profile sudah di-cast ke any)
+        // 3. Persiapkan Data Onboarding (Handle Multi-Select)
         const userPersona = profile?.onboarding_data || {};
 
-        // 3. Prompt yang Lebih Jelas
+        // Cek apakah data berupa Array (Multi-select) atau String (Single)
+        const goals = Array.isArray(userPersona.primaryGoals) 
+            ? userPersona.primaryGoals.join(", ") 
+            : (userPersona.primaryGoal || "General Improvement");
+            
+        const struggles = Array.isArray(userPersona.biggestStruggles) 
+            ? userPersona.biggestStruggles.join(", ") 
+            : (userPersona.biggestStruggle || "Consistency");
+
+        // 4. Prompt yang diperbarui
         const prompt = `
         Act as a motivational Habit Coach named "Strive AI".
         
         USER PROFILE:
         - Name: ${profile?.full_name} (Level ${profile?.current_level})
-        - Main Goal: ${userPersona.primaryGoal || "General Improvement"}
-        - Biggest Struggle: ${userPersona.biggestStruggle || "Consistency"}
+        - Main Goals: ${goals}
+        - Biggest Struggles: ${struggles}
         - Daily Routine: ${userPersona.routineType || "Flexible"}
         
         CURRENT HABITS:
@@ -63,14 +70,15 @@ router.get('/weekly-review', protect, async (req: any, res: Response) => {
         
         TASK:
         1. Analyze their performance based on the logs.
-        2. RELATE your advice to their "Main Goal" and "Biggest Struggle" mentioned in their User Profile. (e.g., if they struggle with time, suggest shorter habits).
+        2. RELATE your advice to their Goals: "${goals}" and Struggles: "${struggles}".
         3. Give a short, energetic summary.
         4. Provide 1 specific actionable tip.
         5. Use emojis. Be friendly, empathetic, but disciplined.
         `;
 
-        // 4. Panggil Gemini
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        // 5. Panggil Gemini (Gunakan Model Lite 2.0 agar support Key Anda)
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite-preview-02-05" });
+        
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
@@ -79,7 +87,18 @@ router.get('/weekly-review', protect, async (req: any, res: Response) => {
 
     } catch (err: any) {
         console.error("AI Error:", err);
-        return res.status(500).json({ error: 'Failed to generate insight.', details: err.message });
+        
+        // Handle Rate Limit (429)
+        if (err.message?.includes("429") || err.status === 429) {
+            return res.status(429).json({ 
+                error: 'AI is taking a break. Please wait 1 minute and try again.' 
+            });
+        }
+
+        return res.status(500).json({ 
+            error: 'Failed to generate insight.',
+            details: err.message 
+        });
     }
 });
 
