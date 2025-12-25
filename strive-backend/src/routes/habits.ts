@@ -275,4 +275,39 @@ router.post('/:habitId/checkin', async (req: any, res: Response) => {
     }
 });
 
+router.get('/heatmap', protect, async (req: any, res: Response) => {
+    try {
+        const userId = req.userId;
+
+        // Ambil data tanggal completion saja dari tabel 'progress'
+        const { data: logs, error } = await supabase
+            .from('progress')
+            .select('completion_date')
+            .eq('user_id', userId);
+
+        if (error) throw error;
+        if (!logs) return res.json({});
+
+        // Hitung jumlah habit selesai per tanggal
+        // Output: { "2025-12-25": 4, "2025-12-26": 1 }
+        const heatmapData: Record<string, number> = {};
+
+        logs.forEach((log: any) => {
+            // Ambil bagian tanggalnya saja (YYYY-MM-DD)
+            const dateKey = new Date(log.completion_date).toISOString().split('T')[0];
+            
+            if (heatmapData[dateKey]) {
+                heatmapData[dateKey]++;
+            } else {
+                heatmapData[dateKey] = 1;
+            }
+        });
+
+        res.json(heatmapData);
+
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;

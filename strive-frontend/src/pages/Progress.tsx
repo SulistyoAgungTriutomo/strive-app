@@ -26,6 +26,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { format } from 'date-fns'; 
 
 const ALL_BADGES = [
   { name: "first_habit", label: "First Step", icon: "🚀", description: "Complete your first habit" },
@@ -38,7 +39,8 @@ const ALL_BADGES = [
 const Progress = () => {
   const queryClient = useQueryClient();
 
-  // 1. FETCH DATA
+  // 1. FETCH DATA (Local Storage / Cache)
+  // Ini otomatis mengambil data terbaru dari database saat aplikasi dibuka
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
   const { data: allHabits = [] } = useQuery({ queryKey: ['habits'], queryFn: getHabits });
   const { data: progressLogs = [] } = useQuery({ queryKey: ['progress'], queryFn: getProgress });
@@ -50,8 +52,22 @@ const Progress = () => {
   const classList = Array.isArray(schedules) ? schedules : [];
   const earnedBadgeNames = new Set(userBadges?.map((b: Badge) => b.badge_name));
 
+  // --- LOGIKA UTAMA: HITUNG HEATMAP SECARA LOKAL ---
+  // Kita memanfaatkan data 'logs' yang SUDAH ADA di HP.
+  // Tidak perlu request ulang ke server.
+  const heatmapData: Record<string, number> = logs.reduce((acc: any, log: any) => {
+      // Ambil tanggal (format YYYY-MM-DD sudah tersimpan di completion_date database)
+      const dateKey = log.completion_date; 
+      
+      if (acc[dateKey]) {
+          acc[dateKey]++;
+      } else {
+          acc[dateKey] = 1;
+      }
+      return acc;
+  }, {});
+
   // 2. STATE & FILTERING
-  const activeDates = logs.map((log: ProgressEntry) => new Date(log.completion_date));
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [habitToDelete, setHabitToDelete] = useState<string | null>(null);
 
@@ -82,24 +98,16 @@ const Progress = () => {
   const expProgress = ((profile?.total_exp || 0) % expForNextLevel); 
 
   // --- STATISTIK ---
-  
-  // 1. Total Habits Crushed
   const totalHabitsCrushed = logs.length;
-
-  // 2. Weekly Consistency Score (%)
   const calculateConsistency = () => {
       if (habits.length === 0) return 0;
-      
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
       const recentLogs = logs.filter((log: ProgressEntry) => 
           new Date(log.completion_date) >= sevenDaysAgo
       ).length;
-
       const maxPossibleLogs = habits.length * 7; 
       if (maxPossibleLogs === 0) return 0;
-
       const score = Math.round((recentLogs / maxPossibleLogs) * 100);
       return score > 100 ? 100 : score;
   };
@@ -139,6 +147,32 @@ const Progress = () => {
 
   const handleDeleteConfirm = () => {
     if (habitToDelete) deleteHabitMutation.mutate(habitToDelete);
+  };
+
+  // --- HEATMAP MODIFIERS LOGIC ---
+  // Menggunakan data hasil hitungan lokal (heatmapData)
+  const heatmapModifiers = {
+    level1: (date: Date) => {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const c = heatmapData[dateStr] || 0;
+        return c >= 1 && c <= 2; 
+    },
+    level2: (date: Date) => {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const c = heatmapData[dateStr] || 0;
+        return c >= 3 && c <= 4; 
+    },
+    level3: (date: Date) => {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const c = heatmapData[dateStr] || 0;
+        return c >= 5; 
+    },
+  };
+
+  const heatmapStyles = {
+    level1: "!bg-blue-200 !text-blue-900 !rounded-md font-bold", 
+    level2: "!bg-blue-400 !text-white !rounded-md font-bold",      
+    level3: "!bg-blue-600 !text-white !rounded-md font-bold", 
   };
 
   return (
@@ -195,6 +229,7 @@ const Progress = () => {
             </div>
         </div>
 
+        {/* Tabs Calendar & Stats */}
         <Tabs defaultValue="calendar" className="space-y-4">
           <TabsList className="grid w-full grid-cols-2 h-9">
             <TabsTrigger value="calendar" className="text-xs">Calendar</TabsTrigger>
@@ -227,10 +262,8 @@ const Progress = () => {
                         day_disabled: "text-muted-foreground opacity-50",
                         day_hidden: "invisible",
                     }}
-                    modifiers={{ hasActivity: activeDates }}
-                    modifiersStyles={{
-                        hasActivity: { fontWeight: '900', color: 'var(--primary)', borderBottom: '2px solid var(--primary)' }
-                    }}
+                    modifiers={heatmapModifiers}
+                    modifiersClassNames={heatmapStyles}
                 />
              </div>
 
@@ -335,10 +368,8 @@ const Progress = () => {
              </div>
           </TabsContent>
 
-          {/* TAB STATISTICS (CLEAN: GRID + BADGES ONLY) */}
+          {/* TAB STATISTICS */}
           <TabsContent value="stats" className="space-y-4">
-             
-             {/* 1. STATS GRID (4 KARTU) */}
              <div className="grid grid-cols-2 gap-3">
                 <div className="bg-card rounded-xl p-4 shadow-sm text-center border">
                     <Target className="h-6 w-6 text-primary mx-auto mb-1" strokeWidth={1.5} />
@@ -360,32 +391,31 @@ const Progress = () => {
                     <p className="text-xl font-bold">{totalHabitsCrushed}</p>
                     <p className="text-xs text-muted-foreground">Total Done</p>
                 </div>
-            </div>
+             </div>
 
-            {/* 2. BADGES */}
-            <div className="bg-card rounded-xl p-4 shadow-sm space-y-3 border">
-              <h3 className="font-semibold text-sm flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-yellow-500" strokeWidth={1.5} />
-                Achievements
-              </h3>
-              <div className="grid grid-cols-3 gap-2">
-                {ALL_BADGES.map((badge) => {
-                  const isEarned = earnedBadgeNames.has(badge.name);
-                  return (
-                    <div
-                      key={badge.name}
-                      className={`
-                        text-center p-2 rounded-lg border flex flex-col items-center justify-center
-                        ${isEarned ? 'bg-primary/5 border-primary/20' : 'bg-muted/30 border-transparent opacity-40 grayscale'}
-                      `}
-                    >
-                      <div className="text-2xl mb-1">{badge.icon}</div>
-                      <p className="text-[10px] font-medium leading-tight">{badge.label}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+             <div className="bg-card rounded-xl p-4 shadow-sm space-y-3 border">
+               <h3 className="font-semibold text-sm flex items-center gap-2">
+                 <Trophy className="h-4 w-4 text-yellow-500" strokeWidth={1.5} />
+                 Achievements
+               </h3>
+               <div className="grid grid-cols-3 gap-2">
+                 {ALL_BADGES.map((badge) => {
+                   const isEarned = earnedBadgeNames.has(badge.name);
+                   return (
+                     <div
+                       key={badge.name}
+                       className={`
+                         text-center p-2 rounded-lg border flex flex-col items-center justify-center
+                         ${isEarned ? 'bg-primary/5 border-primary/20' : 'bg-muted/30 border-transparent opacity-40 grayscale'}
+                       `}
+                     >
+                       <div className="text-2xl mb-1">{badge.icon}</div>
+                       <p className="text-[10px] font-medium leading-tight">{badge.label}</p>
+                     </div>
+                   );
+                 })}
+               </div>
+             </div>
           </TabsContent>
         </Tabs>
       </div>
